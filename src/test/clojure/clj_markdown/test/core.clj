@@ -27,14 +27,15 @@
          (count (markdown
                  (.getResourceAsStream (class System) "/markdown-tests/Markdown Documentation - Syntax.html"))))))
 
-(pprint
- (map #(dissoc % :remaining)
-      (process-markdown-lines
-       (map (fn [lineno line] (assoc line :lineno lineno))
-            (map inc (range))           ; 1..infinity
-            (read-markdown-lines
-             (io/reader
-              (.getResourceAsStream (class System) "/markdown-tests/Markdown Documentation - Basics.text")))))))
+(comment
+  (pprint
+   (map #(dissoc % :remaining)
+        (process-markdown-lines
+         (map (fn [lineno line] (assoc line :lineno lineno))
+              (map inc (range))         ; 1..infinity
+              (read-markdown-lines
+               (io/reader
+                (.getResourceAsStream (class System) "/markdown-tests/Markdown Documentation - Basics.text"))))))))
 
 (pprint
  (markdown

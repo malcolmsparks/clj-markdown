@@ -9,4 +9,5 @@
   :library-path "target/dependency"
   :test-path "src/test/clojure"
   :target-dir "target/"
+  :dev-resources-path "src/test/resources"
   :local-repo-classpath true)
