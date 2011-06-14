@@ -146,7 +146,8 @@ cause the process to run infinitely."
 
     (process-lines
      (reify LineProcessor
-            (process-eof [this state] state) ; TODO
+            (process-eof [this state]
+                         (process-line this (assoc state :line {:empty true :leading 0 :trailing 0 :value ""})))
             (process-line
              [this {:keys [line remaining temp mode] :or {temp []} :as state}]
 
