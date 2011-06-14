@@ -89,7 +89,60 @@ cause the process to run infinitely."
           (pushback [state] (assoc state :remaining (cons (:line state) (:remaining state))))
           (wrap-xml [v] [::xml v])
           (wrap-ulist [v] [::ulist v])
-          (wrap-li [v] [::list-item v])]
+          (wrap-li [v] [::list-item v])
+
+          (xml-mode [{:keys [line temp] :or {temp []} :as state}]
+                    (let [toks (re-seq #"(?:[<>][^<>]+[<>])|(?:[^<>]+)" (:value line))
+                          xml (reduce parse-xml temp toks)]
+                      (if (vector? xml)
+                        (assoc state
+                          :case :finish-xml
+                          :mode ::text
+                          :yield (wrap-xml xml)
+                          :temp [])
+                        (assoc state
+                          :case :continue-xml
+                          :temp xml))))
+
+          (list-mode [{:keys [line temp] :or {temp []} :as state}]
+                     (cond
+                      (true? (:empty line))
+                      (assoc state :case ::continue-ulist)
+
+                      (not (nil? (re-matches #"\s*[\*\-\+]\s.*" (:value line))))
+                      (cond
+                       (> (:leading line) (:leading (last temp)))
+                       (assoc state
+                         :case :continue-ulist
+                         :temp (conj temp {:leading (:leading line) :content (wrap-ulist (wrap-li (:value line)))}))
+                       :otherwise
+                       ;; This collapses the list of nested levels to the correct one
+                       (let [new-temp (first (drop-while #(> (:leading (last %)) (:leading line)) (iterate fold-list-temp temp)))]
+                         (assoc state
+                           :temp (conj (pop new-temp) (assoc (peek new-temp) :yield (:content (peek new-temp)))))))
+
+                      :otherwise
+                      (-> state
+                          pushback
+                          (assoc
+                              :mode ::text
+                              :case ::ending-ulist
+                              :yield (:content (first
+                                                (first
+                                                 (drop-while #(> (count %) 1)
+                                                             (iterate fold-list-temp temp)))))))))
+
+          (code-block-mode [{:keys [line temp] :or {temp []} :as state}]
+                           (if (>= (:leading line) (:initial-leading state))
+                             (assoc state
+                               :case ::continue-code-block
+                               :temp (conj temp line))
+
+                             (assoc (pushback state)
+                               :case ::end-code-block
+                               :yield [::code-block (map #(get-trimmed-value (:initial-leading state) %) temp)]
+                               :temp []
+                               :mode ::text)))]
 
     (process-lines
      (reify LineProcessor
@@ -103,48 +156,10 @@ cause the process to run infinitely."
               (not (contains? state :temp)) (assoc (pushback state) :case :init :temp [])
               (not (contains? state :mode)) (assoc (pushback state) :case :init :mode ::text)
 
-              ;; Existing mode is XML?
-              (= mode ::xml)
-              (let [toks (re-seq #"(?:[<>][^<>]+[<>])|(?:[^<>]+)" (:value line))
-                    xml (reduce parse-xml temp toks)]
-                (if (vector? xml)
-                  (assoc state
-                    :case :finish-xml
-                    :mode ::text
-                    :yield (wrap-xml xml)
-                    :temp [])
-                  (assoc state
-                    :case :continue-xml
-                    :temp xml)))
-
-              ;; Continue a list.
-              (= mode ::list)
-              (cond
-               (not (nil? (re-matches #"\s*[\*\-\+]\s.*" (:value line))))
-               (cond
-                (> (:leading line) (:leading (last temp)))
-                (assoc state
-                  :case :continue-ulist
-                  :temp (conj temp {:leading (:leading line) :content (wrap-ulist (wrap-li (:value line)))}))
-                :otherwise
-                ;; This collapses the list of nested levels to the correct one
-                (let [new-temp (first (drop-while #(> (:leading (last %)) (:leading line)) (iterate fold-list-temp temp)))]
-                  (assoc state
-                    :temp (conj (pop new-temp) (assoc (peek new-temp) :yield (:content (peek new-temp)))))))
-
-               (true? (:empty line))
-               (assoc state :case ::continue-ulist)
-
-               :otherwise
-               (-> state
-                   pushback
-                   (assoc
-                       :mode ::text
-                       :case ::ending-ulist
-                       :yield (:content (first
-                                         (first
-                                          (drop-while #(> (count %) 1)
-                                                      (iterate fold-list-temp temp))))))))
+              ;; Delegate to mode handlers
+              (= mode ::xml) (xml-mode state)
+              (= mode ::list) (list-mode state)
+              (= mode ::code-block) (code-block-mode state)
 
               ;; Starting a list?
               (and (empty? temp)
@@ -172,8 +187,7 @@ cause the process to run infinitely."
               ;; Heading (atx style)
               (not (nil? (re-matches #"#{1,6}\s*.*" (:value line))))
               (if (empty? temp)
-                (let [[_ hashes v] (first (re-seq #"(#{1,6})\s*(.*?)\s*#*$" (:value line)))
-                      ]
+                (let [[_ hashes v] (first (re-seq #"(#{1,6})\s*(.*?)\s*#*$" (:value line)))]
                   (assoc state :yield
                          (case (count hashes)
                                1 [::heading1 v]
@@ -193,14 +207,7 @@ cause the process to run infinitely."
                   (assoc state :case ::xml-line :yield (wrap-xml xml))
                   (assoc state :case ::start-xml :temp xml :mode ::xml)))
 
-              ;; Code block
-              (and
-               (= mode ::code-block)
-               (not (:empty line))
-               (>= (:leading line) (:initial-leading state)))
-              (assoc state
-                :case ::continue-code-block
-                :temp (conj temp line))
+
 
               ;; Start code block
               (and (empty? temp)
@@ -213,25 +220,12 @@ cause the process to run infinitely."
                 :temp (conj temp line))
 
               ;; Line is empty
-              (true? (:empty line))
-              (cond
-               (empty? temp)
-               (assoc state :case ::line-empty :temp [])
-
-               (= mode ::code-block)
-               (assoc state
-                 :case ::code-block
-                 :yield [::code-block (map #(get-trimmed-value (:initial-leading state) %) temp)]
-                 :temp []
-                 :mode ::text)
-
-               (= mode ::text)
-               (assoc state
-                 :case ::para
-                 :yield [::para (reduce str (interpose " " (map :value temp)))]
-                 :temp [])
-
-               :otherwise state)
+              (:empty line)
+              (if (empty? temp)
+                (assoc state :case ::line-empty)
+                (assoc state :case ::para
+                       :yield [::para (reduce str (interpose " " (map :value temp)))]
+                       :temp []))
 
               ;; Default paragraph
               :otherwise
