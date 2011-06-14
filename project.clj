@@ -1,4 +1,4 @@
-(defproject clj-markdown "1.0.0-SNAPSHOT"
+(defproject clj-markdown "0.1"
   :description "A Clojure library to parse the Markdown format."
 
   :dependencies [[org.clojure/clojure "1.2.0"]
