@@ -11,7 +11,7 @@
 (def tests ["#Hard-wrapped paragraphs with list-like lines"
             "#Inline HTML (Simple)"
             "#Horizontal rules"
-            "#Markdown Documentation - Basics"
+            "Markdown Documentation - Basics"
             "#Backslash escapes"
             "#Links, reference style"
             "#Tabs"
@@ -28,14 +28,15 @@
             "#Ordered and unordered lists"
             "#Blockquotes with code blocks"])
 
-(deftest test-all
-  (doall
-   (let [dir (io/file (System/getProperty "user.home") "Downloads/MarkdownTest_1.0/Tests")]
-     (for [t tests]
-       (when (not (.startsWith t "#"))
-         (let [infile (io/file dir (str t ".text"))
-               htmlfile (io/file dir (str t ".html"))]
-           (is (true? (.exists infile)))
-           (is (= (clojure.xml/parse (io/input-stream (.getBytes (str "<div>" (slurp htmlfile) "</div>"))))
-                  (clojure.xml/parse (io/input-stream (.getBytes (with-out-str (prxml/prxml (vec (cons :div (markdown-elements (io/reader infile)))))))))))))))))
+(comment
+  (deftest test-all
+    (doall
+     (let [dir (io/file (System/getProperty "user.home") "Downloads/MarkdownTest_1.0/Tests")]
+       (for [t tests]
+         (when (not (.startsWith t "#"))
+           (let [infile (io/file dir (str t ".text"))
+                 htmlfile (io/file dir (str t ".html"))]
+             (is (true? (.exists infile)))
+             (is (= (clojure.xml/parse (io/input-stream (.getBytes (str "<div>" (slurp htmlfile) "</div>"))))
+                    (clojure.xml/parse (io/input-stream (.getBytes (with-out-str (prxml/prxml (vec (cons :div (markdown (io/reader infile))))))))))))))))))
 
