@@ -25,6 +25,12 @@ The overall aim is to pass all Markdown tests but while making it easier to
 configure and create extensions that can adapt the library to different Markdown
 flavors.
 
+## Build
+
+This project supports both Maven and leiningen. 
+
+Swank support is included for both systems.
+
 ## Status
 
 Currently this objective has not been reached and this library remains in a
