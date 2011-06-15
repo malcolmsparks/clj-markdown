@@ -73,10 +73,6 @@ cause the process to run infinitely."
         [(keyword tag)]
         [(keyword tag) attrs]))))
 
-
-
-
-
 (defn process-markdown-lines [input]
   (letfn [(fold [stack]
                 (cond (empty? stack) nil
@@ -120,17 +116,24 @@ cause the process to run infinitely."
                       (true? (:empty line))
                       (assoc state :case ::continue-ulist)
 
-                      (not (nil? (re-matches #"\s*[\*\-\+]\s.*" (:value line))))
+                      (re-matches #"\s*[\*\-\+]\s.*" (:value line))
                       (cond
                        (> (:leading line) (:leading (last temp)))
                        (assoc state
                          :case :continue-ulist
                          :temp (conj temp {:leading (:leading line) :content (wrap-ulist (wrap-li (:value line)))}))
+
                        :otherwise
                        ;; This collapses the list of nested levels to the correct one
                        (let [new-temp (first (drop-while #(> (:leading (last %)) (:leading line)) (iterate fold-list-temp temp)))]
                          (assoc state
                            :temp (conj (pop new-temp) (assoc (peek new-temp) :yield (:content (peek new-temp)))))))
+
+                      ;; TODO: Revisit list implementation, check dingus - cope
+                      ;; with lists at Syntax:591
+                      (> (:leading line) 0)
+                      (assoc state
+                        :temp (conj (pop temp) (assoc (peek temp) :content (conj (:content (peek temp)) (:value line)))))
 
                       :otherwise
                       (-> state
@@ -149,11 +152,13 @@ cause the process to run infinitely."
                                :case ::continue-code-block
                                :temp (conj temp line))
 
-                             (assoc (pushback state)
-                               :case ::end-code-block
-                               :yield [::code-block (map #(get-trimmed-value (:initial-leading state) %) temp)]
-                               :temp []
-                               :mode ::text)))]
+                             (-> (pushback state)
+                                 (assoc 
+                                     :case ::end-code-block
+                                     :yield [::code-block (map #(get-trimmed-value (:initial-leading state) %) temp)]
+                                     :temp []
+                                     :mode ::text)
+                                 (dissoc :initial-leading))))]
 
     (process-lines
      (reify LineProcessor
@@ -175,21 +180,21 @@ cause the process to run infinitely."
 
               ;; Heading1
               (and (= (count temp) 1)
-                   (not (nil? (re-matches #"[\=]+" (:value line)))))
+                   (re-matches #"[\=]+" (:value line)))
               (assoc state
                 :case ::finish-heading1
                 :yield [::heading1 (:value (first temp))] :temp [])
 
               ;; Heading2
               (and (= (count temp) 1)
-                   (not (nil? (re-matches #"[-]+" (:value line)))))
+                   (re-matches #"[-]+" (:value line)))
               (assoc state
                 :case ::finish-heading2
                 :yield [::heading2 (:value (first temp))]
                 :temp [])
 
               ;; Heading (atx style)
-              (not (nil? (re-matches #"#{1,6}\s*.*" (:value line))))
+              (re-matches #"#{1,6}\s*.*" (:value line))
               (if (empty? temp)
                 (let [[_ hashes v] (first (re-seq #"(#{1,6})\s*(.*?)\s*#*$" (:value line)))]
                   (assoc state :yield
@@ -204,52 +209,54 @@ cause the process to run infinitely."
 
               ;; Horizontal rule
               (re-matches #"(?:-(?:\s*-){2,})|(?:\*(?:\s*\*){2,})|(?:_(?:\s*_){2,})" (:value line))
-              (let [_ (assert (empty? temp))]
-                ;; TODO: Do this assert consistently in the algo.
+              (do
+                (assert (empty? temp))
                 (assoc state
                   :case ::horizontal-rule
                   :yield [::horizontal-rule]))
 
               ;; Starting a list?
-              (and (empty? temp)
-                   (not (nil? (re-matches #"\s{0,3}[\*\-\+]\s.*" (:value line)))))
-              (assoc state
-                :case ::starting-ulist
-                :temp [{:leading (:leading line) :content (wrap-ulist (wrap-li (:value line)))}]
-                :mode ::list)
+              (re-matches #"\s{0,3}[\*\-\+]\s.*" (:value line))
+              (do
+                (assert (empty? temp))
+                (assoc state
+                  :case ::starting-ulist
+                  :temp [{:leading (:leading line) :content (wrap-ulist (wrap-li (:value line)))}]
+                  :mode ::list))
 
               ;; Start of an XML block?
-              (and (empty? temp)
-                   (not (empty? (re-seq #"^<\S+[^>]*>" (:value line)))))
-              (let [toks (re-seq #"(?:[<>][^<>]+[<>])|(?:[^<>]+)" (:value line))
+              (re-matches #"^<\S+[^>]*>" (:value line))
+              (let [_ (assert (empty? temp))
+                    toks (re-seq #"(?:[<>][^<>]+[<>])|(?:[^<>]+)" (:value line))
                     xml (reduce parse-xml '() toks)]
                 (if (vector? xml)
                   (assoc state :case ::xml-line :yield (wrap-xml xml))
                   (assoc state :case ::start-xml :temp xml :mode ::xml)))
 
               ;; Start code block
-              (and (empty? temp)
-                   (not (:empty line))
-                   (>= (:leading line) 4))
-              (assoc state
-                :case ::start-code-block
-                :mode ::code-block
-                :initial-leading (:leading line)
-                :temp (conj temp line))
+              (>= (:leading line) 4)
+              (do
+                (assert (empty? temp))
+                (assoc state
+                  :case ::start-code-block
+                  :mode ::code-block
+                  :initial-leading (:leading line)
+                  :temp (conj temp line)))
 
               ;; Hard line break
               (re-matches #"\S.*\s{2,}$" (:value line))
               (assoc state
-                :case ::para
-                     :yield [::para (reduce str (interpose " " (map :value temp)))]
-                       :temp [])
-              
-              ;; Line is empty
-              (:empty line)
+                :case ::hard-line
+                :temp (-> temp (conj line) (conj [:br])))
+
+              ;; Line is empty (or contains only whitespace)
+              (or
+               (:empty line)
+               (re-matches #"\s*" (:value line)))
               (if (empty? temp)
                 (assoc state :case ::line-empty)
                 (assoc state :case ::para
-                       :yield [::para (reduce str (interpose " " (map :value temp)))]
+                       :yield [::para (map #(if (line? %) (:value %) %) temp)]
                        :temp []))
 
               ;; Default paragraph
