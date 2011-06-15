@@ -230,6 +230,13 @@ cause the process to run infinitely."
                 :initial-leading (:leading line)
                 :temp (conj temp line))
 
+              ;; Hard line break
+              (re-matches #"\S.*\s{2,}$" (:value line))
+              (assoc state
+                :case ::para
+                     :yield [::para (reduce str (interpose " " (map :value temp)))]
+                       :temp [])
+              
               ;; Line is empty
               (:empty line)
               (if (empty? temp)
@@ -241,7 +248,6 @@ cause the process to run infinitely."
               ;; Default paragraph
               :otherwise
               (assoc state :case ::default :temp (conj temp line)))))
-
      input)))
 
 (defn markdown [input]
