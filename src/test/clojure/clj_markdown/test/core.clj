@@ -40,3 +40,7 @@
 (pprint
  (markdown
   (.getResourceAsStream (class System) "/markdown-tests/Markdown Documentation - Basics.text")))
+
+(pprint
+ (markdown
+  (.getResourceAsStream (class System) "/markdown-tests/Blockquotes with code blocks.text")))

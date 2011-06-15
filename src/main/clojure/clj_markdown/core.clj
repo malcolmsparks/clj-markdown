@@ -146,6 +146,18 @@ cause the process to run infinitely."
                                                  (drop-while #(> (count %) 1)
                                                              (iterate fold-list-temp temp)))))))))
 
+          (block-quote-mode [{:keys [line temp] :or {temp []} :as state}]
+                            (if (:empty line)
+                              (assoc state
+                                :case ::end-block-quote
+                                :yield [::block-quote (map :value temp)]
+                                :temp []
+                                :mode :text)
+
+                              (assoc state
+                                :case ::continue-block-quote
+                                :temp (conj temp line))))
+
           (code-block-mode [{:keys [line temp] :or {temp []} :as state}]
                            (if (>= (:leading line) (:initial-leading state))
                              (assoc state
@@ -153,7 +165,7 @@ cause the process to run infinitely."
                                :temp (conj temp line))
 
                              (-> (pushback state)
-                                 (assoc 
+                                 (assoc
                                      :case ::end-code-block
                                      :yield [::code-block (map #(get-trimmed-value (:initial-leading state) %) temp)]
                                      :temp []
@@ -162,8 +174,10 @@ cause the process to run infinitely."
 
     (process-lines
      (reify LineProcessor
+
             (process-eof [this state]
                          (process-line this (assoc state :line {:empty true :leading 0 :trailing 0 :value ""})))
+
             (process-line
              [this {:keys [line remaining temp mode] :or {temp []} :as state}]
 
@@ -176,6 +190,7 @@ cause the process to run infinitely."
               ;; Delegate to mode handlers
               (= mode ::xml) (xml-mode state)
               (= mode ::list) (list-mode state)
+              (= mode ::block-quote) (block-quote-mode state)
               (= mode ::code-block) (code-block-mode state)
 
               ;; Heading1
@@ -192,6 +207,15 @@ cause the process to run infinitely."
                 :case ::finish-heading2
                 :yield [::heading2 (:value (first temp))]
                 :temp [])
+
+              ;; Block quotes
+              (re-matches #">.*" (:value line))
+              (do
+                (assert (empty? temp))
+                (assoc state
+                  :case ::start-block-quote
+                  :temp [line]
+                  :mode ::block-quote))
 
               ;; Heading (atx style)
               (re-matches #"#{1,6}\s*.*" (:value line))
@@ -264,12 +288,15 @@ cause the process to run infinitely."
               (assoc state :case ::default :temp (conj temp line)))))
      input)))
 
+(defn markdown-debug [input]
+  (map #(dissoc % :remaining)
+       (process-markdown-lines
+        (map (fn [lineno line] (assoc line :lineno lineno))
+             (map inc (range))          ; 1..infinity
+             (read-markdown-lines (io/reader
+                                   input))))))
+
 (defn markdown [input]
-  (filter-yields
-   (process-markdown-lines
-    (map (fn [lineno line] (assoc line :lineno lineno))
-         (map inc (range))              ; 1..infinity
-         (read-markdown-lines (io/reader
-                               input))))))
+  (filter-yields (markdown-debug input)))
 
 
