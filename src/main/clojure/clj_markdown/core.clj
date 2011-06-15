@@ -29,7 +29,7 @@ iterating over the lines from the processing of lines themselves. The
 LineProcessor function returns the next state, but this defaults to the next
 line, thereby reducing the probability that a mistake in the processor will
 cause the process to run infinitely."
-  (let [[yields eofs]
+  (let [[results eofs]
         (split-with #(not (contains? % :end))
                     (letfn [(step [{[line & rem] :remaining :as state}]
                                   (let [new-state (assoc state :line line :remaining rem)
@@ -40,7 +40,7 @@ cause the process to run infinitely."
                                           (catch AssertionError e (throw (Exception. (format "Assertion failed, state was %s" (dissoc new-state-tidied :remaining)) e)))
                                           (catch Exception e (throw (Exception. (format "Assertion failed, state was %s" (dissoc new-state-tidied :remaining)) e)))))))]
                       (iterate step {:remaining lines})))]
-    (concat yields (list (first eofs)))))
+    (concat results (list (first eofs)))))
 
 (defn filter-yields [states]
   (filter #(not (nil? %)) (map :yield states)))
@@ -176,7 +176,7 @@ cause the process to run infinitely."
      (reify LineProcessor
 
             (process-eof [this state]
-                         (process-line this (assoc state :line {:empty true :leading 0 :trailing 0 :value ""})))
+                         (process-line this (assoc state :line {:empty true :leading 0 :trailing 0 :value "" :dummy :end})))
 
             (process-line
              [this {:keys [line remaining temp mode] :or {temp []} :as state}]
