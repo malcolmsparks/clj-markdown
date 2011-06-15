@@ -25,6 +25,14 @@ The overall aim is to pass all Markdown tests but while making it easier to
 configure and create extensions that can adapt the library to different Markdown
 flavors.
 
+## Performance
+
+The library is optimised for correctness over performance. In certain cases
+where performance is not critical is will likely be adequate (documentation
+build systems). For high-performance web-pages, use a cache policy where
+Markdown is used for static content (i.e., generate the content once and cache
+it in memory).
+
 ## Build
 
 This project supports both Maven and leiningen. 
