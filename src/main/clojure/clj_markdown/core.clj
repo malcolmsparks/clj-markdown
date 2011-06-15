@@ -66,6 +66,10 @@ cause the process to run infinitely."
         [(keyword tag)]
         [(keyword tag) attrs]))))
 
+
+
+
+
 (defn process-markdown-lines [input]
   (letfn [(fold [stack]
                 (cond (empty? stack) nil
@@ -162,14 +166,6 @@ cause the process to run infinitely."
               (= mode ::list) (list-mode state)
               (= mode ::code-block) (code-block-mode state)
 
-              ;; Starting a list?
-              (and (empty? temp)
-                   (not (nil? (re-matches #"\s{0,3}[\*\-\+]\s.*" (:value line)))))
-              (assoc state
-                :case ::starting-ulist
-                :temp [{:leading (:leading line) :content (wrap-ulist (wrap-li (:value line)))}]
-                :mode ::list)
-
               ;; Heading1
               (and (= (count temp) 1)
                    (not (nil? (re-matches #"[\=]+" (:value line)))))
@@ -199,6 +195,22 @@ cause the process to run infinitely."
                                6 [::heading6 v])))
                 (throw (Exception. "Pushback a blank line to ensure the existing temp is yielded properly.")))
 
+              ;; Horizontal rule
+              (re-matches #"(?:-(?:\s*-){2,})|(?:\*(?:\s*\*){2,})|(?:_(?:\s*_){2,})" (:value line))
+              (let [_ (assert (empty? temp))]
+                ;; TODO: Do this assert consistently in the algo.
+                (assoc state
+                  :case ::horizontal-rule
+                  :yield [::horizontal-rule]))
+
+              ;; Starting a list?
+              (and (empty? temp)
+                   (not (nil? (re-matches #"\s{0,3}[\*\-\+]\s.*" (:value line)))))
+              (assoc state
+                :case ::starting-ulist
+                :temp [{:leading (:leading line) :content (wrap-ulist (wrap-li (:value line)))}]
+                :mode ::list)
+
               ;; Start of an XML block?
               (and (empty? temp)
                    (not (empty? (re-seq #"^<\S+[^>]*>" (:value line)))))
@@ -207,8 +219,6 @@ cause the process to run infinitely."
                 (if (vector? xml)
                   (assoc state :case ::xml-line :yield (wrap-xml xml))
                   (assoc state :case ::start-xml :temp xml :mode ::xml)))
-
-
 
               ;; Start code block
               (and (empty? temp)

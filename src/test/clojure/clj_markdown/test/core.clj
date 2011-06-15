@@ -39,4 +39,4 @@
 
 (pprint
  (markdown
-  (.getResourceAsStream (class System) "/markdown-tests/Markdown Documentation - Basics.text")))
+  (.getResourceAsStream (class System) "/markdown-tests/Markdown Documentation - Syntax.text")))
