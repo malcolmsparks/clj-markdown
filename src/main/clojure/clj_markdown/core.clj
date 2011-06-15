@@ -35,12 +35,19 @@ cause the process to run infinitely."
                                   (let [new-state (assoc state :line line :remaining rem)
                                         new-state-tidied (dissoc new-state :yield)]
                                     (if (nil? line) (assoc (process-eof proc new-state-tidied) :end true)
-                                        (process-line proc new-state-tidied))))]
+                                        (try
+                                          (process-line proc new-state-tidied)
+                                          (catch AssertionError e (throw (Exception. (format "Assertion failed, state was %s" (dissoc new-state-tidied :remaining)) e)))
+                                          (catch Exception e (throw (Exception. (format "Assertion failed, state was %s" (dissoc new-state-tidied :remaining)) e)))))))]
                       (iterate step {:remaining lines})))]
     (concat yields (list (first eofs)))))
 
 (defn filter-yields [states]
   (filter #(not (nil? %)) (map :yield states)))
+
+(defn line? [x]
+  (and (map? x)
+       (every? #(contains? x %) [:value :leading :trailing :empty])))
 
 (defn read-markdown-lines [reader]
   (letfn [
