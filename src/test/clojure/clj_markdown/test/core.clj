@@ -23,9 +23,9 @@
    [clojure.java.io :as io]))
 
 (deftest test-markdown-elements
-  (is (= 273
+  (is (= 276
          (count (markdown
-                 (.getResourceAsStream (class System) "/markdown-tests/Markdown Documentation - Syntax.html"))))))
+                 (.getResourceAsStream (class System) "/markdown-tests/Markdown Documentation - Syntax.text"))))))
 
 (comment
   (pprint
@@ -39,4 +39,4 @@
 
 (pprint
  (markdown
-  (.getResourceAsStream (class System) "/markdown-tests/Markdown Documentation - Syntax.text")))
+  (.getResourceAsStream (class System) "/markdown-tests/Markdown Documentation - Basics.text")))
