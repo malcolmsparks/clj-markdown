@@ -1,4 +1,4 @@
-;; Copyright 2010 Malcolm Sparks.
+;; Copyright 2011 Malcolm Sparks.
 ;;
 ;; This file is part of clj-markdown.
 ;;
