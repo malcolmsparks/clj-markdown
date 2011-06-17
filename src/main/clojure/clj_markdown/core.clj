@@ -141,6 +141,7 @@ cause the process to run infinitely."
                           (assoc
                               :mode ::text
                               :case ::ending-ulist
+                              :temp []
                               :yield (:content (first
                                                 (first
                                                  (drop-while #(> (count %) 1)
@@ -229,7 +230,7 @@ cause the process to run infinitely."
                                4 [::heading4 v]
                                5 [::heading5 v]
                                6 [::heading6 v])))
-                (throw (Exception. "Pushback a blank line to ensure the existing temp is yielded properly.")))
+                (throw (Exception. (str "Pushback a blank line to ensure the existing temp is yielded properly." line))))
 
               ;; Horizontal rule
               (re-matches #"(?:-(?:\s*-){2,})|(?:\*(?:\s*\*){2,})|(?:_(?:\s*_){2,})" (:value line))
