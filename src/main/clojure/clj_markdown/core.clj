@@ -16,7 +16,9 @@
 
 (ns clj-markdown.core
   (:use clojure.contrib.pprint)
-  (:require [clojure.java.io :as io]))
+  (:require [clojure.java.io :as io]
+            [clojure.zip :as zip]
+            [clojure.contrib.zip-filter :as zipf]))
 
 (defprotocol LineProcessor
   (process-line [this state])
@@ -73,12 +75,59 @@ cause the process to run infinitely."
         [(keyword tag)]
         [(keyword tag) attrs]))))
 
+(defn- fold [stack]
+  (cond (empty? stack) nil
+        (= (count stack) 1) (first stack)
+        :otherwise (conj (pop (pop stack)) (conj (peek (pop stack)) (peek stack)))))
+
+(defn- parse-xml [stack tok]
+  (cond
+   (.startsWith tok "</") (fold stack)
+   (.startsWith tok "<") (conj stack (parse-xml-open-token tok))
+   (= 0 (count (.trim tok))) stack
+   :otherwise (conj (pop stack) (conj (peek stack) tok))))
+
+(defn- tokenize-by-chevron [s]
+  (re-seq #"(?:[<>][^<>]+[<>])|(?:[^<>]+)" s))
+
+(defn replace-patterns-with-markup [s pattern tag]
+  (letfn [(wrap [tag s] (format "<%s>%s</%s>" tag s tag))
+          (rep [{[[replace with] & remaining] :groups
+                 result :result}]
+               {:groups remaining :result (.replace result replace (wrap tag with))})]
+    (:result (first (drop-while #(not (nil? (:groups %))) (iterate rep {:groups (re-seq pattern s) :result s}))))))
+
+(defn substitute-emphasis
+  "Apply markdown standard emphasis"
+  [s]
+  (-> s
+      (replace-patterns-with-markup #"\*\*([\S]+)\*\*" "strong$")
+      (replace-patterns-with-markup #"__([\S]+)__" "strong$")
+      (replace-patterns-with-markup #"\*([\S]+)\*" "emphasis$")
+      (replace-patterns-with-markup #"_([\S]+)_" "emphasis$")))
+
+(defn markup-text [k s]
+  (->
+   (->> s
+        (substitute-emphasis)
+        (format "<wrapper>%s</wrapper>")
+        tokenize-by-chevron
+        (reduce parse-xml '())
+        zip/vector-zip
+        zip/next
+        ((fn [loc] (zip/replace loc k))) ; replace keyword
+        (iterate (fn [loc]
+                   (cond
+                    (zip/end? loc) nil
+                    (= (zip/node loc) :strong$) (zip/replace loc ::strong)
+                    (= (zip/node loc) :emphasis$) (zip/replace loc ::emphasis)
+                    :otherwise (zip/next loc))))
+        (take-while #(not (nil? %)))
+        last
+        zip/root)))
+
 (defn process-markdown-lines [input]
-  (letfn [(fold [stack]
-                (cond (empty? stack) nil
-                      (= (count stack) 1) (first stack)
-                      :otherwise (conj (pop (pop stack)) (conj (peek (pop stack)) (peek stack)))))
-          (fold-list-temp [temp]
+  (letfn [(fold-list-temp [temp]
                           (conj (pop (pop temp))
                                 (assoc (peek (pop temp)) :content (conj (:content (peek (pop temp)))
                                                                         (:content (peek temp))))))
@@ -87,12 +136,7 @@ cause the process to run infinitely."
                                (if (<= left-trim to)
                                  (.substring (:value line) left-trim to)
                                  "")))
-          (parse-xml [stack tok]
-                     (cond
-                      (.startsWith tok "</") (fold stack)
-                      (.startsWith tok "<") (conj stack (parse-xml-open-token tok))
-                      (= 0 (count (.trim tok))) stack
-                      :otherwise (conj (pop stack) (conj (peek stack) tok))))
+
           (pushback [state] (assoc state :remaining (cons (:line state) (:remaining state))))
           (wrap-xml [v] [::xml v])
           (wrap-ulist [v] [::ulist v])
@@ -199,14 +243,14 @@ cause the process to run infinitely."
                    (re-matches #"[\=]+" (:value line)))
               (assoc state
                 :case ::finish-heading1
-                :yield [::heading1 (:value (first temp))] :temp [])
+                :yield (markup-text ::heading1 (:value (first temp))) :temp [])
 
               ;; Heading2
               (and (= (count temp) 1)
                    (re-matches #"[-]+" (:value line)))
               (assoc state
                 :case ::finish-heading2
-                :yield [::heading2 (:value (first temp))]
+                :yield (markup-text ::heading2 (:value (first temp)))
                 :temp [])
 
               ;; Block quotes
@@ -281,10 +325,10 @@ cause the process to run infinitely."
               (if (empty? temp)
                 (assoc state :case ::line-empty)
                 (assoc state :case ::para
-                       :yield [::para (map #(if (line? %) (:value %) %) temp)]
+                       :yield (markup-text ::para (reduce str (interpose " " (map #(if (line? %) (:value %) %) temp))))
                        :temp []))
 
-              ;; Default paragraph
+              ;; Otherwise
               :otherwise
               (assoc state :case ::default :temp (conj temp line)))))
      input)))

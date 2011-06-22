@@ -44,3 +44,17 @@
 (pprint
  (markdown
   (.getResourceAsStream (class System) "/markdown-tests/Blockquotes with code blocks.text")))
+
+(pprint
+ (markdown
+  (io/file "/home/malcolm/src/clojure-contrib/README.md")))
+
+(markdown (java.io.StringReader. "this is some <tt>hello</tt> span
+with a new-line with some <emphasis><tt>other span</tt></emphasis>"))
+
+
+;; TODO: Download Markdown.pl
+;; TODO: Better list handling
+;; TODO: Nested (stack-based) support for block-quotes
+;; TODO: Paragraph mutations
+;; TODO: Download github hints
