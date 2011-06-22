@@ -3,6 +3,7 @@
   (:require
    [clojure.java.io :as io]
    [clojure.zip :as zip]
+   [clojure.contrib.zip-filter :as zipf]
    [clojure.contrib.prxml :as prxml]))
 
 
@@ -30,6 +31,11 @@
          (zip/next)
          (zip/edit #(reduce str (interpose " " %))))
 
+        (= marker :clj-markdown.core/ulist)
+        (->
+         head
+         (zip/replace :ul))
+
         (= marker :clj-markdown.core/code-block)
         (->
          head
@@ -46,11 +52,17 @@
   (binding [prxml/*prxml-indent* 4]
     (prxml/prxml (emit-html blocks))))
 
-(pprint
- (emit-html
-  (markdown
-   (.getResourceAsStream (class System) "/markdown-tests/Markdown Documentation - Basics.text"))))
+(comment
+  (pprint
+   (emit-html
+    (markdown
+     (.getResourceAsStream (class System) "/markdown-tests/Markdown Documentation - Basics.text"))))
 
-(print-html
- (markdown
-  (.getResourceAsStream (class System) "/markdown-tests/Markdown Documentation - Basics.text")))
+  (print-html
+   (markdown
+    (.getResourceAsStream (class System) "/markdown-tests/Markdown Documentation - Basics.text")))
+
+  (pprint
+   (emit-html
+    (markdown (io/file "/home/malcolm/src/clojure-contrib/README.md")))))
+
